@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'edit_profile_page.dart';
-import 'package:kareba/Screens/logout.dart'; // Sesuaikan dengan letak file logout.dart Bapak
+import 'package:kareba/Screens/edit_profile_page.dart';
+import 'package:kareba/Screens/logout.dart';
+import 'package:kareba/Screens/siswa_page.dart';
 
 class DashboardAdmin extends StatefulWidget {
   const DashboardAdmin({super.key});
@@ -472,37 +473,36 @@ class _DashboardAdminState extends State<DashboardAdmin> {
   }
 
   Widget _buildMenuPopup() {
-    Widget _buildMenuPopup() {
-  return Container(
-    width: 220,
-    padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(
-      color: const Color(0xFF1A1A1A).withValues(alpha: 0.95),
-      borderRadius: BorderRadius.circular(15),
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildPopupItem(Icons.people_outline, "Siswa", () {
-          setState(() => _isMenuOpen = false);
-          // Navigasi ke halaman siswa
-        }),
-        _buildPopupItem(Icons.inventory_2_outlined, "Sarpras", () {
-          setState(() => _isMenuOpen = false);
-          // Navigasi ke halaman sarpras
-        }),
-        
-        // --- KEMBALIKAN FUNGSI LOGOUT SEBELUMNYA ---
-        _buildPopupItem(Icons.logout, "Log Out", () async {
-          setState(() => _isMenuOpen = false); // Tutup popup menu
-          
-          // Memanggil AuthService sesuai fungsi yang ada di dashboard_guru.dart
-          await AuthService.logout(context); 
-        }),
-      ],
-    ),
-  );
-}
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A).withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildPopupItem(Icons.people_outline, "Siswa", () {
+            setState(() => _isMenuOpen = false);
+            // Navigasi ke halaman siswa
+          }),
+          _buildPopupItem(Icons.inventory_2_outlined, "Sarpras", () {
+            setState(() => _isMenuOpen = false);
+            // Navigasi ke halaman sarpras
+          }),
+
+          // --- KEMBALIKAN FUNGSI LOGOUT SEBELUMNYA ---
+          _buildPopupItem(Icons.logout, "Log Out", () async {
+            setState(() => _isMenuOpen = false); // Tutup popup menu
+
+            // Memanggil AuthService sesuai fungsi yang ada di dashboard_guru.dart
+            await AuthService.logout(context);
+          }),
+        ],
+      ),
+    );
+  }
 
   Widget _buildPopupItem(IconData icon, String label, VoidCallback onTap) {
     return ListTile(

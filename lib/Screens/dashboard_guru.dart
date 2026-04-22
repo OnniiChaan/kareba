@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'edit_profile_page.dart';
-import 'siswa_page.dart';
-import 'sarpras_page.dart';
-import 'package:kareba/Screens/logout.dart';
-import 'package:flutter_speed_dial/flutter_speed_dial.dart';
 
 class DashboardGuru extends StatefulWidget {
   const DashboardGuru({super.key});
@@ -17,114 +12,113 @@ class DashboardGuru extends StatefulWidget {
 class _DashboardGuruState extends State<DashboardGuru> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
+
   String _namaLengkap = "Memuat...";
   String? _fotoProfilUrl;
-  final isDialOpen = ValueNotifier<bool>(false); // Notifier untuk SpeedDial
 
-SpeedDialChild _buildSpeedDialItem({
-    required IconData icon, 
-    required String label, 
-    required VoidCallback onTap
-  }) {
-    return SpeedDialChild(
-      child: Container(
-        width: 250, // Sesuaikan lebar agar teks tidak terpotong
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.8), 
-          borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min, // Agar container menyesuaikan isi
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      onTap: onTap,
-    );
-  }
+  // --- VARIABEL UNTUK MENAMPUNG JUMLAH DATA (DYNAMIC) ---
+  int countPelanggaran = 0;
+  int countPrestasi = 0;
+  int countPerluPerbaikan = 0;
+  int countDiproses = 0;
+  int countSelesai = 0;
+  bool _isLoadingCounts = false;
 
-  // DATA DUMMY
-  List<Map<String, dynamic>> aktivitasList = [
-    {
-      "nama": "Nama Lengkap Siswa",
-      "kelas": "Nama Kelas Siswa",
-      "jenis": "Jenis Pelanggaran",
-      "L": 5,
-      "P": 2,
-      "isPelanggaran": true,
-    },
-    {
-      "nama": "Nama Lengkap Siswa",
-      "kelas": "Nama Kelas Siswa",
-      "jenis": "Jenis Prestasi",
-      "L": 1,
-      "P": 8,
-      "isPelanggaran": false,
-    },
-  ];
-
-  List<Map<String, dynamic>> sarprasList = [
-    {"item": "Item 1", "status": "Perlu perbaikan", "isSelesai": false},
-    {"item": "Item 2", "status": "Telah diperbaiki", "isSelesai": true},
-  ];
+  bool _isMenuOpen = false;
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _focusedDay;
     _fetchUserData();
+    // Ambil data untuk tanggal hari ini saat pertama kali buka
+    _fetchDashboardCounts(_focusedDay);
   }
 
+  // 1. FUNGSI AMBIL DATA PROFIL
   Future<void> _fetchUserData() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
-
       final response = await Supabase.instance.client
           .from('profiles')
           .select('nama_lengkap, foto_url')
           .eq('id', user.id)
           .single();
-
       setState(() {
-        _namaLengkap = response['nama_lengkap'] ?? "User Tidak Dikenal";
+        _namaLengkap = response['nama_lengkap'] ?? "Administrator";
         if (response['foto_url'] != null &&
             response['foto_url'].toString().isNotEmpty) {
           _fotoProfilUrl = Supabase.instance.client.storage
               .from('profil_images')
               .getPublicUrl(response['foto_url']);
-        } else {
-          _fotoProfilUrl = null;
         }
       });
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Error User Data: $e");
     }
   }
 
-  Future<void> _refreshPage() async {
-    await _fetchUserData();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Halaman diperbarui'),
-          duration: Duration(seconds: 1),
-        ),
-      );
+  // 2. FUNGSI QUERY FILTER BERDASARKAN TANGGAL (INTI PERUBAHAN)
+  Future<void> _fetchDashboardCounts(DateTime date) async {
+    if (!mounted) return;
+    setState(() => _isLoadingCounts = true);
+
+    final dateStr =
+        "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+
+    try {
+      // CARA TERBARU: Gunakan head: true untuk mendapatkan count tanpa mengambil seluruh data
+      final resPelanggaran = await Supabase.instance.client
+          .from('pelanggaran')
+          .select()
+          .eq('tanggal_input', dateStr)
+          .count(CountOption.exact); // Cara baru mengambil jumlah data
+
+      final resPrestasi = await Supabase.instance.client
+          .from('prestasi')
+          .select()
+          .eq('tanggal_input', dateStr)
+          .count(CountOption.exact);
+
+      final resPerbaikan = await Supabase.instance.client
+          .from('sarpras')
+          .select()
+          .eq('tanggal_lapor', dateStr)
+          .eq('status', 'Perlu Perbaikan')
+          .count(CountOption.exact);
+
+      final resDiproses = await Supabase.instance.client
+          .from('sarpras')
+          .select()
+          .eq('tanggal_lapor', dateStr)
+          .eq('status', 'Diproses')
+          .count(CountOption.exact);
+
+      final resSelesai = await Supabase.instance.client
+          .from('sarpras')
+          .select()
+          .eq('tanggal_lapor', dateStr)
+          .eq('status', 'Selesai')
+          .count(CountOption.exact);
+
+      if (mounted) {
+        setState(() {
+          // Ambil hasil count-nya
+          countPelanggaran = resPelanggaran.count;
+          countPrestasi = resPrestasi.count;
+          countPerluPerbaikan = resPerbaikan.count;
+          countDiproses = resDiproses.count;
+          countSelesai = resSelesai.count;
+          _isLoadingCounts = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error Fetch: $e");
+      if (mounted) setState(() => _isLoadingCounts = false);
     }
   }
 
-  // MODIFIKASI: Menggunakan SpeedDial untuk menu bawah
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -133,7 +127,7 @@ SpeedDialChild _buildSpeedDialItem({
         height: double.infinity,
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFF0D47A1), Color(0xFF80CBC4)],
+            colors: [Color(0xFF163C5F), Color(0xFF6FD8EF)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -153,43 +147,95 @@ SpeedDialChild _buildSpeedDialItem({
                           const SizedBox(height: 20),
                           _buildCalendar(),
                           const SizedBox(height: 25),
-                          const Text(
-                            "Rekam Aktivitas Siswa",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ...aktivitasList.map(
-                            (item) => _buildDataCard(
-                              title: "${item['nama']} (${item['kelas']})",
-                              subtitle: item['jenis'],
-                              trailing: "L: ${item['L']}   P: ${item['P']}",
-                              color: item['isPelanggaran']
-                                  ? Colors.red
-                                  : Colors.orange,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            "Pelaporan Sarpras",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ...sarprasList.map(
-                            (item) => _buildDataCard(
-                              title: item['item'],
-                              subtitle: item['status'],
-                              color: item['isSelesai']
-                                  ? Colors.green
-                                  : Colors.orange,
-                            ),
+
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // KOLOM KIRI (Aktivitas Siswa)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Aktivitas Siswa",
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _buildDashboardCard(
+                                      number: _isLoadingCounts
+                                          ? "..."
+                                          : countPelanggaran.toString(),
+                                      title: "Pelanggaran",
+                                      color: const Color(0xFFFF6B6B),
+                                      icon: Icons.campaign_outlined,
+                                      onTap: () {},
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildDashboardCard(
+                                      number: _isLoadingCounts
+                                          ? "..."
+                                          : countPrestasi.toString(),
+                                      title: "Prestasi",
+                                      color: const Color(0xFFFFD93D),
+                                      icon: Icons.workspace_premium_outlined,
+                                      onTap: () {},
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 15),
+
+                              // KOLOM KANAN (Pelaporan Sarpras)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Pelaporan Sarpras",
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _buildDashboardCard(
+                                      number: _isLoadingCounts
+                                          ? "..."
+                                          : countPerluPerbaikan.toString(),
+                                      title: "Perlu Perbaikan",
+                                      color: const Color(0xFFFF4C4C),
+                                      icon: Icons.home_repair_service_outlined,
+                                      onTap: () {},
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildDashboardCard(
+                                      number: _isLoadingCounts
+                                          ? "..."
+                                          : countDiproses.toString(),
+                                      title: "Diproses",
+                                      color: const Color(0xFFFF9F1C),
+                                      icon: Icons.construction,
+                                      onTap: () {},
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _buildDashboardCard(
+                                      number: _isLoadingCounts
+                                          ? "..."
+                                          : countSelesai.toString(),
+                                      title: "Selesai",
+                                      color: const Color(0xFF8CEE4C),
+                                      icon: Icons.engineering,
+                                      onTap: () {},
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 100),
                         ],
@@ -199,69 +245,46 @@ SpeedDialChild _buildSpeedDialItem({
                 ],
               ),
 
-              // FLOATING MENU (Sisi Kiri) & SPEED DIAL (Sisi Kanan)
-              // Ganti bagian Positioned lama dengan ini
+              if (_isMenuOpen)
+                GestureDetector(
+                  onTap: () => setState(() => _isMenuOpen = false),
+                  child: Container(
+                    color: Colors.black26,
+                    width: double.infinity,
+                    height: double.infinity,
+                  ),
+                ),
+
+              if (_isMenuOpen)
+                Positioned(bottom: 80, left: 20, child: _buildMenuPopup()),
+
               Positioned(
                 bottom: 20,
                 left: 20,
-                right: 20,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // 1. Tombol Menu Samping (Tetap seperti sebelumnya)
-                    _buildNavButton(
-                      Icons.menu,
-                      "Menu",
-                      () => _showFloatingMenu(context),
+                child: ElevatedButton.icon(
+                  onPressed: () => setState(() => _isMenuOpen = !_isMenuOpen),
+                  icon: Icon(
+                    _isMenuOpen ? Icons.close : Icons.menu,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  label: Text(
+                    _isMenuOpen ? "Tutup" : "Menu",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
-
-                    // 2. TOMBOL TAMBAH DENGAN SPEED DIAL CUSTOM
-                    SpeedDial(
-                      openCloseDial: isDialOpen,
-                      icon: Icons.add_circle_outline,
-                      activeIcon: Icons.cancel_outlined,
-                      label: const Text(
-                        "Tambah",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      backgroundColor: const Color(0xFF001942),
-                      foregroundColor: Colors.white,
-                      activeBackgroundColor: const Color(0xFF001942),
-                      // Menghilangkan shadow/background putih yang mengganggu
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      spacing: 15,
-                      childPadding: const EdgeInsets.all(0),
-                      childrenButtonSize: const Size(
-                        220,
-                        50,
-                      ), // Membuat ukuran popup memanjang ke samping
-
-                      children: [
-                        _buildSpeedDialItem(
-                          icon: Icons.stars_rounded,
-                          label: "Rekam Prestasi Siswa",
-                          onTap: () => debugPrint("Ke Prestasi"),
-                        ),
-                        _buildSpeedDialItem(
-                          icon: Icons.assignment_late_rounded,
-                          label: "Rekam Pelanggaran Siswa",
-                          onTap: () => debugPrint("Ke Pelanggaran"),
-                        ),
-                        _buildSpeedDialItem(
-                          icon: Icons.home_repair_service_rounded,
-                          label: "Lapor Perbaikan Sarpras",
-                          onTap: () => debugPrint("Ke Sarpras"),
-                        ),
-                      ],
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF001942),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
                     ),
-                  ],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -300,43 +323,25 @@ SpeedDialChild _buildSpeedDialItem({
                     color: Colors.black,
                   ),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const Text(
-                  "Guru",
+                  "Administrator",
                   style: TextStyle(fontSize: 13, color: Colors.black54),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.sync, color: Colors.black87),
-            onPressed: _refreshPage,
+            icon: const Icon(Icons.sync),
+            onPressed: () =>
+                _fetchDashboardCounts(_selectedDay ?? DateTime.now()),
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.black87),
-            onPressed: () {},
-          ),
-          GestureDetector(
-            onTap: () async {
-              final refresh = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const EditProfilePage(),
-                ),
-              );
-              if (refresh == true) _fetchUserData();
-            },
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Colors.grey.shade300,
-              backgroundImage: _fotoProfilUrl != null
-                  ? NetworkImage(_fotoProfilUrl!)
-                  : null,
-              child: _fotoProfilUrl == null
-                  ? const Icon(Icons.person, color: Colors.black54, size: 20)
-                  : null,
-            ),
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: Colors.grey.shade300,
+            backgroundImage: _fotoProfilUrl != null
+                ? NetworkImage(_fotoProfilUrl!)
+                : null,
           ),
         ],
       ),
@@ -348,13 +353,7 @@ SpeedDialChild _buildSpeedDialItem({
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(15),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black26,
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10)],
       ),
       padding: const EdgeInsets.all(10),
       child: TableCalendar(
@@ -367,6 +366,8 @@ SpeedDialChild _buildSpeedDialItem({
             _selectedDay = selectedDay;
             _focusedDay = focusedDay;
           });
+          // TRIGGER QUERY SETIAP GANTI TANGGAL
+          _fetchDashboardCounts(selectedDay);
         },
         headerStyle: const HeaderStyle(
           formatButtonVisible: false,
@@ -388,153 +389,86 @@ SpeedDialChild _buildSpeedDialItem({
     );
   }
 
-  Widget _buildDataCard({
+  Widget _buildDashboardCard({
+    required String number,
     required String title,
-    required String subtitle,
-    String? trailing,
     required Color color,
+    required IconData icon,
+    required VoidCallback onTap,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 90,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.black87, width: 2),
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              top: -5,
+              left: 0,
+              child: Text(
+                number,
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Icon(icon, size: 35, color: Colors.black87),
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Row(
+    );
+  }
+
+  Widget _buildMenuPopup() {
+    return Container(
+      width: 220,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A).withOpacity(0.95),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
-                    ),
-                    if (trailing != null)
-                      Text(
-                        trailing,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          CircleAvatar(
-            backgroundColor: color,
-            radius: 15,
-            child: const Icon(
-              Icons.arrow_forward,
-              color: Colors.white,
-              size: 16,
-            ),
-          ),
+          _buildPopupItem(Icons.people_outline, "Siswa", () {}),
+          _buildPopupItem(Icons.inventory_2_outlined, "Sarpras", () {}),
+          _buildPopupItem(Icons.logout, "Log Out", () {}),
         ],
       ),
     );
   }
 
-  Widget _buildNavButton(IconData icon, String label, VoidCallback onTap) {
-    return ElevatedButton.icon(
-      onPressed: onTap,
-      icon: Icon(icon, color: Colors.white, size: 20),
-      label: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF001942),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
-
-  // FUNGSI POPUP MENU SAMPING (Siswa, Sarpras, Logout)
-  void _showFloatingMenu(BuildContext context) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: "Menu",
-      barrierColor: Colors.transparent,
-      pageBuilder: (context, anim1, anim2) {
-        return Align(
-          alignment: Alignment.bottomLeft,
-          child: Container(
-            margin: const EdgeInsets.only(left: 20, bottom: 85),
-            padding: const EdgeInsets.all(10),
-            width: 220,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.85),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildPopupItem(Icons.people_outline, "Siswa", () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SiswaListPage(),
-                      ),
-                    );
-                  }),
-                  _buildPopupItem(Icons.inventory_2_outlined, "Sarpras", () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SarprasListPage(),
-                      ),
-                    );
-                  }),
-                  _buildPopupItem(Icons.logout, "Log Out", () async {
-                    Navigator.pop(context);
-                    await AuthService.logout(context);
-                  }),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Widget _buildPopupItem(IconData icon, String label, VoidCallback onTap) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white, size: 22),
+      leading: Icon(icon, color: Colors.white, size: 20),
       title: Text(
         label,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: const TextStyle(color: Colors.white, fontSize: 14),
       ),
       onTap: onTap,
-      dense: true,
     );
   }
 }

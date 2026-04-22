@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'register.dart';
-import 'dashboard_admin.dart';
-import 'dashboard_guru.dart';
 import 'dashboard_siswa.dart';
+// PASTIKAN import dashboard admin dan guru sudah benar
+import 'package:kareba/Screens/dashboard_admin.dart';
+import 'package:kareba/Screens/dashboard_guru.dart'; // <--- Tambahkan/Pastikan ini ada
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,7 +18,6 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  // --- FUNGSI LOGIKA LOGIN ---
   Future<void> _login() async {
     final String email = _emailController.text.trim();
     final String password = _passwordController.text.trim();
@@ -32,17 +32,12 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      // 1. Auth Login ke Supabase
-      final AuthResponse res = await Supabase.instance.client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      final AuthResponse res = await Supabase.instance.client.auth
+          .signInWithPassword(email: email, password: password);
 
       final User? user = res.user;
 
       if (user != null) {
-        // 2. Ambil data ROLE dari tabel profiles
-        // Kita gunakan query manual untuk menangkap jika data tidak ada
         final List<dynamic> data = await Supabase.instance.client
             .from('profiles')
             .select('role')
@@ -55,14 +50,15 @@ class _LoginPageState extends State<LoginPage> {
         final String role = data[0]['role'];
 
         if (mounted) {
-          // 3. Arahkan ke Dashboard sesuai Role
           Widget targetPage;
+          // Logika switch untuk menentukan halaman berdasarkan role
           switch (role) {
             case 'Admin':
               targetPage = const DashboardAdmin();
               break;
             case 'Guru':
-              targetPage = const DashboardGuru();
+              targetPage =
+                  const DashboardGuru(); // Ini merujuk ke class di dashboard_guru.dart
               break;
             default:
               targetPage = const DashboardSiswa();
@@ -82,7 +78,6 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (e) {
       if (mounted) {
-        // Menampilkan detail error asli untuk mempermudah perbaikan (Debugging)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
         );
@@ -92,6 +87,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  // ... sisa kode build, _inputStyle, dan _buildButton tetap sama seperti sebelumnya ...
   @override
   void dispose() {
     _emailController.dispose();
@@ -121,7 +117,8 @@ class _LoginPageState extends State<LoginPage> {
                 child: Image.asset(
                   'assets/images/logo.png',
                   height: 200,
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.image, size: 100, color: Colors.white),
+                  errorBuilder: (context, error, stackTrace) =>
+                      const Icon(Icons.image, size: 100, color: Colors.white),
                 ),
               ),
             ),
@@ -130,12 +127,20 @@ class _LoginPageState extends State<LoginPage> {
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    _buildButton("Lanjut dengan Google", Colors.grey[300]!, Colors.black, () {}),
+                    _buildButton(
+                      "Lanjut dengan Google",
+                      Colors.grey[300]!,
+                      Colors.black,
+                      () {},
+                    ),
                     const SizedBox(height: 20),
                     Row(
-                      children: [
+                      children: const [
                         Expanded(child: Divider(color: Colors.black54)),
-                        const Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text("atau")),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 10),
+                          child: Text("atau"),
+                        ),
                         Expanded(child: Divider(color: Colors.black54)),
                       ],
                     ),
@@ -152,9 +157,14 @@ class _LoginPageState extends State<LoginPage> {
                       decoration: _inputStyle("password"),
                     ),
                     const SizedBox(height: 25),
-                    _isLoading 
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : _buildButton("Login", Colors.grey[300]!, Colors.black, _login),
+                    _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : _buildButton(
+                            "Login",
+                            Colors.grey[300]!,
+                            Colors.black,
+                            _login,
+                          ),
                     const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -162,11 +172,19 @@ class _LoginPageState extends State<LoginPage> {
                         const Text("Daftar akun? "),
                         GestureDetector(
                           onTap: () {
-                            Navigator.push(context, MaterialPageRoute(builder: (context) => const RegisterPage()));
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const RegisterPage(),
+                              ),
+                            );
                           },
                           child: const Text(
                             "Klik di sini",
-                            style: TextStyle(decoration: TextDecoration.underline, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              decoration: TextDecoration.underline,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
@@ -188,11 +206,19 @@ class _LoginPageState extends State<LoginPage> {
       filled: true,
       fillColor: Colors.grey[300],
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(5), borderSide: BorderSide.none),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(5),
+        borderSide: BorderSide.none,
+      ),
     );
   }
 
-  Widget _buildButton(String text, Color bg, Color textCol, VoidCallback onPressed) {
+  Widget _buildButton(
+    String text,
+    Color bg,
+    Color textCol,
+    VoidCallback onPressed,
+  ) {
     return SizedBox(
       width: double.infinity,
       height: 55,
@@ -201,10 +227,15 @@ class _LoginPageState extends State<LoginPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: textCol,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
           elevation: 0,
         ),
-        child: Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }

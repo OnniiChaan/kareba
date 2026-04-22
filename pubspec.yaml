@@ -1,0 +1,28 @@
+name: kareba
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  image_picker: ^1.2.1
+  supabase_flutter: ^2.12.4
+  table_calendar: ^3.2.0
+  flutter_speed_dial: ^7.0.0 # Gunakan versi terbaru
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo.png
+    - assets/images/SplashScreen.png

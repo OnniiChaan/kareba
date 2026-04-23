@@ -76,9 +76,9 @@ class _DashboardGuruState extends State<DashboardGuru> {
           .count(CountOption.exact); // Cara baru mengambil jumlah data
 
       final resPrestasi = await Supabase.instance.client
-          .from('prestasi')
+          .from('prestasi_siswa')
           .select()
-          .eq('tanggal_input', dateStr)
+          .eq('tanggal', dateStr)
           .count(CountOption.exact);
 
       final resPerbaikan = await Supabase.instance.client
@@ -374,6 +374,14 @@ class _DashboardGuruState extends State<DashboardGuru> {
           titleCentered: true,
         ),
         calendarStyle: const CalendarStyle(
+          defaultDecoration: BoxDecoration(
+            shape: BoxShape.rectangle,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          weekendDecoration: BoxDecoration(
+            shape: BoxShape.rectangle,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
           selectedDecoration: BoxDecoration(
             color: Color(0xFF424242),
             shape: BoxShape.rectangle,

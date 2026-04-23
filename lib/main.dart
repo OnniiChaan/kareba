@@ -3,6 +3,7 @@ import 'package:kareba/Screens/splash.dart';
 import 'package:kareba/Screens/login.dart';
 import 'package:kareba/Screens/dashboard_guru.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +13,8 @@ void main() async {
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhibml0eGF5enR6b2llY2lydGdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3MDU0ODgsImV4cCI6MjA5MjI4MTQ4OH0.h0546lwWWwiggqd0yqwM44quvL4Th_7oSs187kzMjdA',
   );
+
+  await initializeDateFormatting(null, null);
 
   runApp(const MyApp());
 }

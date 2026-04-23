@@ -361,6 +361,14 @@ class _DashboardAdminState extends State<DashboardAdmin> {
           titleCentered: true,
         ),
         calendarStyle: const CalendarStyle(
+          defaultDecoration: BoxDecoration(
+            shape: BoxShape.rectangle,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
+          weekendDecoration: BoxDecoration(
+            shape: BoxShape.rectangle,
+            borderRadius: BorderRadius.all(Radius.circular(8)),
+          ),
           selectedDecoration: BoxDecoration(
             color: Color(0xFF424242),
             shape: BoxShape.rectangle,
@@ -485,7 +493,10 @@ class _DashboardAdminState extends State<DashboardAdmin> {
         children: [
           _buildPopupItem(Icons.people_outline, "Siswa", () {
             setState(() => _isMenuOpen = false);
-            // Navigasi ke halaman siswa
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SiswaPage()),
+            );
           }),
           _buildPopupItem(Icons.inventory_2_outlined, "Sarpras", () {
             setState(() => _isMenuOpen = false);

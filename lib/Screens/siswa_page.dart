@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 import 'tambah_siswa_page.dart'; // Import halaman tambah siswa
+import 'detail_siswa_page.dart'; // Import halaman detail siswa
 
 class SiswaPage extends StatefulWidget {
   const SiswaPage({super.key});
@@ -16,12 +18,11 @@ class _SiswaPageState extends State<SiswaPage> {
 
   List<dynamic> _allSiswa = [];
   List<dynamic> _filteredSiswa = [];
-  Map<String, int> _pelanggaranCount =
-      {}; // Menyimpan total pelanggaran per siswa
+  Map<String, int> _pelanggaranCount = {}; 
+  Map<String, int> _prestasiCount = {};
 
   String _searchQuery = "";
-  final Set<String> _expandedLetters =
-      {}; // Menyimpan abjad mana yang sedang dibuka
+  final Set<String> _expandedLetters = {};
 
   @override
   void initState() {
@@ -30,53 +31,75 @@ class _SiswaPageState extends State<SiswaPage> {
   }
 
   Future<void> _fetchData() async {
+    final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDay);
     try {
-      // 1. Ambil data semua siswa
+      // 1. Ambil data semua siswa (untuk referensi dasar)
       final resSiswa = await Supabase.instance.client
           .from('siswa')
           .select()
           .order('nama_lengkap', ascending: true);
-
-      // 2. Ambil data pelanggaran di tanggal yang dipilih untuk menghitung (L)
-      final dateStr =
-          "${_selectedDay.year}-${_selectedDay.month.toString().padLeft(2, '0')}-${_selectedDay.day.toString().padLeft(2, '0')}";
-      final resPelanggaran = await Supabase.instance.client
-          .from('pelanggaran')
-          .select('siswa_id')
-          .eq('tanggal_input', dateStr);
-
-      // Hitung pelanggaran per siswa
+      
+      // 2. Ambil total pelanggaran per siswa (L) pada tanggal terpilih
       Map<String, int> pCount = {};
-      for (var p in resPelanggaran) {
-        String sId = p['siswa_id'].toString();
-        pCount[sId] = (pCount[sId] ?? 0) + 1;
+      try {
+        final resPelanggaran = await Supabase.instance.client
+            .from('pelanggaran')
+            .select()
+            .eq('tanggal_input', dateStr);
+
+        for (var p in resPelanggaran) {
+          String? sKey = p['nisn']?.toString() ?? p['siswa_id']?.toString() ?? p['id_siswa']?.toString() ?? p['siswa']?.toString();
+          if (sKey != null) {
+            pCount[sKey] = (pCount[sKey] ?? 0) + 1;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error fetching pelanggaran: $e");
+      }
+
+      // 3. Ambil total prestasi per siswa (P) pada tanggal terpilih
+      Map<String, int> prCount = {};
+      try {
+        final resPrestasi = await Supabase.instance.client
+            .from('prestasi_siswa')
+            .select()
+            .eq('tanggal', dateStr);
+
+        for (var p in resPrestasi) {
+          String? sKey = p['nisn']?.toString() ?? p['siswa_id']?.toString() ?? p['id_siswa']?.toString() ?? p['siswa']?.toString();
+          if (sKey != null) {
+            prCount[sKey] = (prCount[sKey] ?? 0) + 1;
+          }
+        }
+      } catch (e) {
+        debugPrint("Error fetching prestasi: $e");
       }
 
       setState(() {
         _allSiswa = resSiswa;
-        _filteredSiswa = resSiswa;
         _pelanggaranCount = pCount;
+        _prestasiCount = prCount;
+        
+        // Tampilkan semua siswa, tapi tetap dukung fitur pencarian
+        _filteredSiswa = resSiswa.where((s) {
+          if (_searchQuery.isEmpty) return true;
+          
+          final nama = (s['nama_lengkap'] ?? '').toLowerCase();
+          final nisn = (s['nisn'] ?? '').toLowerCase();
+          final kelas = (s['kelas'] ?? '').toLowerCase();
+          return nama.contains(_searchQuery) || nisn.contains(_searchQuery) || kelas.contains(_searchQuery);
+        }).toList();
       });
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Error fetching data: $e");
     }
   }
 
   void _filterSiswa(String query) {
-    setState(() {
-      _searchQuery = query.toLowerCase();
-      _filteredSiswa = _allSiswa.where((siswa) {
-        final nama = (siswa['nama_lengkap'] ?? '').toLowerCase();
-        final nisn = (siswa['nisn'] ?? '').toLowerCase();
-        final kelas = (siswa['kelas'] ?? '').toLowerCase();
-        return nama.contains(_searchQuery) ||
-            nisn.contains(_searchQuery) ||
-            kelas.contains(_searchQuery);
-      }).toList();
-    });
+    _searchQuery = query.toLowerCase();
+    _fetchData();
   }
 
-  // Kelompokkan siswa berdasarkan huruf pertama
   Map<String, List<dynamic>> _groupSiswaByLetter() {
     Map<String, List<dynamic>> grouped = {};
     for (var siswa in _filteredSiswa) {
@@ -90,6 +113,12 @@ class _SiswaPageState extends State<SiswaPage> {
     return grouped;
   }
 
+  final List<String> _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'
+  ];
+  final List<int> _years = [2024, 2025, 2026, 2027, 2028];
+
   @override
   Widget build(BuildContext context) {
     final groupedData = _groupSiswaByLetter();
@@ -97,45 +126,54 @@ class _SiswaPageState extends State<SiswaPage> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 80,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 10),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios, color: Colors.black, size: 40),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               "List Siswa",
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Colors.black,
               ),
             ),
             Text(
               "Tahun Pelajaran 2026",
-              style: TextStyle(fontSize: 12, color: Colors.black54),
+              style: TextStyle(fontSize: 14, color: Colors.black54),
             ),
           ],
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
         actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.add_box_outlined,
-              color: Colors.black,
-              size: 30,
+          Padding(
+            padding: const EdgeInsets.only(right: 15),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.black, width: 2),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: IconButton(
+                icon: const Icon(Icons.add, color: Colors.black, size: 30),
+                onPressed: () async {
+                  final refresh = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const TambahSiswaPage(),
+                    ),
+                  );
+                  if (refresh == true) _fetchData();
+                },
+              ),
             ),
-            onPressed: () async {
-              final refresh = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const TambahSiswaPage(),
-                ),
-              );
-              if (refresh == true) _fetchData();
-            },
           ),
         ],
       ),
@@ -151,55 +189,102 @@ class _SiswaPageState extends State<SiswaPage> {
         child: Column(
           children: [
             const SizedBox(height: 10),
-            // --- KALENDER MINGGUAN ---
-            TableCalendar(
-              firstDay: DateTime.utc(2020, 1, 1),
-              lastDay: DateTime.utc(2030, 12, 31),
-              focusedDay: _focusedDay,
-              calendarFormat:
-                  CalendarFormat.week, // Menampilkan 1 baris minggu saja
-              availableCalendarFormats: const {CalendarFormat.week: 'Week'},
-              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-              onDaySelected: (selectedDay, focusedDay) {
-                setState(() {
-                  _selectedDay = selectedDay;
-                  _focusedDay = focusedDay;
-                });
-                _fetchData(); // Ambil ulang data L (pelanggaran) saat tanggal diganti
-              },
-              headerStyle: const HeaderStyle(
-                titleCentered: true,
-                formatButtonVisible: false,
-                titleTextStyle: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+            // --- DROPDOWNS ---
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildRealDropdown(
+                  value: _months[_focusedDay.month - 1],
+                  items: _months,
+                  onChanged: (val) {
+                    if (val != null) {
+                      int monthIdx = _months.indexOf(val) + 1;
+                      setState(() {
+                        _focusedDay = DateTime(_focusedDay.year, monthIdx, _focusedDay.day);
+                      });
+                    }
+                  },
                 ),
-              ),
-              calendarStyle: const CalendarStyle(
-                defaultTextStyle: TextStyle(color: Colors.white),
-                weekendTextStyle: TextStyle(color: Colors.redAccent),
-                selectedDecoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
+                const SizedBox(width: 10),
+                _buildRealDropdown(
+                  value: _focusedDay.year.toString(),
+                  items: _years.map((e) => e.toString()).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _focusedDay = DateTime(int.parse(val), _focusedDay.month, _focusedDay.day);
+                      });
+                    }
+                  },
                 ),
-                selectedTextStyle: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.bold,
+              ],
+            ),
+            
+            // --- CALENDAR ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: TableCalendar(
+                firstDay: DateTime.utc(2020, 1, 1),
+                lastDay: DateTime.utc(2030, 12, 31),
+                focusedDay: _focusedDay,
+                calendarFormat: CalendarFormat.week,
+                availableCalendarFormats: const {CalendarFormat.week: 'Week'},
+                startingDayOfWeek: StartingDayOfWeek.sunday,
+                headerStyle: HeaderStyle(
+                  leftChevronIcon: const Icon(Icons.arrow_back_ios, color: Colors.black, size: 25),
+                  rightChevronIcon: const Icon(Icons.arrow_forward_ios, color: Colors.black, size: 25),
+                  formatButtonVisible: false,
+                  titleCentered: false, // Kita sembunyikan title karena sudah ada dropdown di atas
+                  headerPadding: EdgeInsets.zero,
+                  leftChevronMargin: EdgeInsets.zero,
+                  rightChevronMargin: EdgeInsets.zero,
+                  titleTextStyle: const TextStyle(fontSize: 0), // Hide default title
                 ),
-                todayDecoration: BoxDecoration(
-                  color: Colors.white30,
-                  shape: BoxShape.circle,
+                daysOfWeekHeight: 25,
+                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                onDaySelected: (selectedDay, focusedDay) {
+                  setState(() {
+                    _selectedDay = selectedDay;
+                    _focusedDay = focusedDay;
+                  });
+                  _fetchData();
+                },
+                onPageChanged: (focusedDay) {
+                  setState(() {
+                    _focusedDay = focusedDay;
+                  });
+                  // Opsi: Bisa juga fetch data jika ingin hari pertama di minggu tersebut terpilih
+                },
+                calendarStyle: const CalendarStyle(
+                  defaultTextStyle: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  weekendTextStyle: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                  selectedDecoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                  ),
+                  selectedTextStyle: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  todayDecoration: BoxDecoration(
+                    color: Colors.white30,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              daysOfWeekStyle: const DaysOfWeekStyle(
-                weekdayStyle: TextStyle(color: Colors.white),
-                weekendStyle: TextStyle(color: Colors.redAccent),
+                daysOfWeekStyle: DaysOfWeekStyle(
+                  dowTextFormatter: (date, locale) {
+                    final days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+                    return days[date.weekday % 7];
+                  },
+                  weekdayStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  weekendStyle: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
 
             // --- PENCARIAN ---
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
               child: TextField(
                 onChanged: _filterSiswa,
                 decoration: InputDecoration(
@@ -217,7 +302,7 @@ class _SiswaPageState extends State<SiswaPage> {
               ),
             ),
 
-            // --- DAFTAR ABJAD AKORDION ---
+            // --- DAFTAR ABJAD ---
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -230,126 +315,9 @@ class _SiswaPageState extends State<SiswaPage> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header Abjad (A, B, C...)
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            isExpanded
-                                ? _expandedLetters.remove(letter)
-                                : _expandedLetters.add(letter);
-                          });
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Row(
-                            children: [
-                              Text(
-                                letter,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Text(
-                                  "----------------------------------------------------------------",
-                                  maxLines: 1,
-                                  overflow: TextOverflow.clip,
-                                  style: TextStyle(color: Colors.white54),
-                                ),
-                              ),
-                              Icon(
-                                isExpanded
-                                    ? Icons.keyboard_arrow_up
-                                    : Icons.keyboard_arrow_down,
-                                color: Colors.white,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // List Card Siswa jika Expanded
+                      _buildLetterHeader(letter, isExpanded),
                       if (isExpanded)
-                        ...siswaList.map((siswa) {
-                          int totalL =
-                              _pelanggaranCount[siswa['id'].toString()] ?? 0;
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.8),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.black87),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        "${siswa['nama_lengkap']} (${siswa['kelas']})",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            siswa['nisn'] ?? "-",
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.black87,
-                                            ),
-                                          ),
-                                          Text(
-                                            "L: $totalL  P: 0",
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.black87,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                InkWell(
-                                  onTap: () {
-                                    // Tombol panah mengarah ke detail/edit (sesuai instruksi)
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            const TambahSiswaPage(),
-                                      ),
-                                    );
-                                  },
-                                  child: const CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: Colors.white,
-                                    child: Icon(
-                                      Icons.arrow_forward,
-                                      color: Colors.black,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
+                        ...siswaList.map((siswa) => _buildSiswaCard(siswa)).toList(),
                     ],
                   );
                 },
@@ -360,4 +328,192 @@ class _SiswaPageState extends State<SiswaPage> {
       ),
     );
   }
+
+  Widget _buildRealDropdown({
+    required String value,
+    required List<String> items,
+    required ValueChanged<String?> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          icon: const Icon(Icons.keyboard_arrow_down, color: Colors.black),
+          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+          onChanged: onChanged,
+          items: items.map<DropdownMenuItem<String>>((String val) {
+            return DropdownMenuItem<String>(
+              value: val,
+              child: Text(val),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLetterHeader(String letter, bool isExpanded) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          isExpanded ? _expandedLetters.remove(letter) : _expandedLetters.add(letter);
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            Text(
+              letter,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: CustomPaint(
+                painter: DottedLinePainter(),
+                child: const SizedBox(height: 1),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                color: Colors.black54,
+                size: 20,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  Widget _buildSiswaCard(dynamic siswa) {
+    String nisn = (siswa['nisn'] ?? "").toString();
+    int totalL = _pelanggaranCount[nisn] ?? 0;
+    int totalP = _prestasiCount[nisn] ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.black, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 5,
+            offset: const Offset(0, 3),
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "${siswa['nama_lengkap']} (${siswa['kelas']})",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "NISN: ${siswa['nisn'] ?? "-"}",
+                      style: const TextStyle(fontSize: 14, color: Colors.black87),
+                    ),
+                    Text(
+                      "L: $totalL  P: $totalP",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          IconButton(
+            icon: const Icon(Icons.arrow_circle_right_outlined, color: Colors.blueGrey, size: 35),
+            onPressed: () async {
+              final refresh = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DetailSiswaPage(siswa: siswa),
+                ),
+              );
+              if (refresh == true) _fetchData();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteSiswa(dynamic siswa) async {
+    bool confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Hapus Data"),
+        content: Text("Hapus data ${siswa['nama_lengkap']}?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Batal")),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Hapus", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    ) ?? false;
+
+    if (confirm) {
+      try {
+        await Supabase.instance.client.from('siswa').delete().eq('id', siswa['id']);
+        _fetchData();
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal hapus: $e")));
+      }
+    }
+  }
+}
+
+class DottedLinePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white54
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    
+    const dashWidth = 3;
+    const dashSpace = 3;
+    double startX = 0;
+    while (startX < size.width) {
+      canvas.drawLine(Offset(startX, 0), Offset(startX + dashWidth, 0), paint);
+      startX += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => false;
 }
